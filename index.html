@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>휘매쓰 연산 챌린지!</title>
+<style>
+    body {
+        font-family: Arial, sans-serif;
+        background: #f4f4f4;
+        margin: 0;
+        padding: 0;
+    }
+    #container {
+        width: 80%;
+        margin: 20px auto;
+        background: #fff;
+        padding: 20px;
+        box-shadow: 0px 0px 10px #ccc;
+    }
+    h1 {
+        text-align: center;
+    }
+    .difficulty-selection {
+        text-align: center;
+        margin: 20px 0;
+    }
+    .btn {
+        padding: 10px 20px;
+        margin: 0 10px;
+        background: #007BFF;
+        color: #fff;
+        border: none;
+        cursor: pointer;
+        font-size: 16px;
+    }
+    .btn:hover {
+        background: #0056b3;
+    }
+    #game-area {
+        display: none;
+    }
+    #problem {
+        font-size: 20px;
+        margin-bottom: 20px;
+        text-align: center;
+    }
+    .choices {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+    .choice-btn {
+        width: 45%;
+        margin: 10px;
+        background: #e7e7e7;
+        text-align: center;
+        padding: 10px;
+        cursor: pointer;
+        border: 1px solid #ccc;
+        font-size: 18px;
+    }
+    .choice-btn:hover {
+        background: #ddd;
+    }
+    #score, #lives, #global-timer {
+        margin: 10px 0;
+        font-size: 18px;
+        text-align: center;
+    }
+    #energy-bar-container {
+        width: 80%;
+        margin: 0 auto;
+        height: 20px;
+        background: #ccc;
+        border: 1px solid #999;
+        position: relative;
+        margin-bottom: 20px;
+    }
+    #energy-bar {
+        width: 100%;
+        height: 20px;
+        background: #76c043;
+        transition: width 0.5s linear;
+    }
+    #popup {
+        display: none;
+        position: fixed;
+        top: 20%;
+        left: 50%;
+        transform: translateX(-50%);
+        background: #fff;
+        border: 2px solid #333;
+        padding: 20px;
+        z-index: 9999;
+        width: 50%;
+        max-height: 50%;
+        overflow:auto;
+    }
+    #popup h2 {
+        margin-top: 0;
+    }
+    #popup .close-btn {
+        display: inline-block;
+        margin-top: 10px;
+        padding: 5px 10px;
+        background: #333;
+        color: #fff;
+        cursor: pointer;
+        text-align: center;
+    }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" defer></script>
+</head>
+<body>
+<div id="container">
+    <h1>휘매쓰 연산 챌린지!</h1>
+    <!-- 이름 입력란 추가 -->
+    <div id="player-info" style="text-align:center; margin-bottom: 20px;">
+      <label for="playerName">이름: </label>
+      <input type="text" id="playerName" placeholder="이름을 입력하세요">
+    </div>
+    <div id="difficulty-selection" class="difficulty-selection">
+        <p>난이도를 선택하세요:</p>
+        <button class="btn" onclick="selectDifficulty('최상')">최상 (20초, 문제당 20점)</button>
+        <button class="btn" onclick="selectDifficulty('상')">상 (30초, 15점)</button>
+        <button class="btn" onclick="selectDifficulty('중')">중 (40초, 13점)</button>
+        <button class="btn" onclick="selectDifficulty('하')">하 (시간 무제한, 10점)</button>
+    </div>
+    <div id="game-area">
+        <div id="global-timer">전체 진행 시간: 0분 0초</div>
+        <div id="score">점수: 0</div>
+        <div id="lives">남은 기회: 3</div>
+        <div id="energy-bar-container">
+            <div id="energy-bar"></div>
+        </div>
+        <div id="problem"></div>
+        <div class="choices">
+            <div class="choice-btn" onclick="chooseAnswer(event)"></div>
+            <div class="choice-btn" onclick="chooseAnswer(event)"></div>
+            <div class="choice-btn" onclick="chooseAnswer(event)"></div>
+            <div class="choice-btn" onclick="chooseAnswer(event)"></div>
+        </div>
+    </div>
+</div>
+<!-- 결과 패널 (게임 종료 후 표시) -->
+<div id="result-panel" style="display:none; text-align:center; margin-top: 20px;">
+  <h2>게임 결과</h2>
+  <p id="final-score"></p>
+  <p id="final-time"></p>
+  <button id="send-button" class="btn" onclick="sendResult()">전송하기</button>
+  <pre id="response"></pre>
+</div>
+<div id="popup"></div>
+  
+<script>
+var questions = [
+  /* 기존 문제 배열 (생략) */
+];
+
+var difficultySettings = {
+    "최상": {time:20, score:20},
+    "상": {time:30, score:15},
+    "중": {time:40, score:13},
+    "하": {time:Infinity, score:10}
+};
+
+var currentDifficulty = null;
+var currentTimeLimit = Infinity; 
+var currentScorePerProblem = 10;
+var currentIndex = 0;
+var score = 0;
+var lives = 3;
+var globalTime = 0; 
+var intervalGlobal = null;
+var intervalEnergy = null;
+var energyTimeLeft = 0;
+var usedQuestions = []; 
+var infiniteMode = false; 
+var currentQuestion = null;
+var currentCorrectAnswer = null;
+var solutionPopupOpen = false;
+
+function fractionToDecimal(frac) {
+    if(frac.includes('/')){
+        var parts = frac.split('/');
+        return parseFloat(parts[0])/parseFloat(parts[1]);
+    } else {
+        return parseFloat(frac);
+    }
+}
+function gcd(a,b){return b==0?Math.abs(a):gcd(b,a%b);}
+function decimalToFraction(dec) {
+    var sign = dec<0?-1:1;
+    dec=Math.abs(dec);
+    var best = {num:0,den:1,error:Infinity};
+    for(var den=1; den<=200; den++){
+        var num=Math.round(dec*den);
+        var err=Math.abs(dec - num/den);
+        if(err<best.error){
+            best={num:num,den:den,error:err};
+        }
+    }
+    var g=gcd(best.num,best.den);
+    best.num/=g; best.den/=g;
+    if(sign<0) best.num=-best.num;
+    if(best.den==1) return best.num.toString();
+    return best.num+"/"+best.den;
+}
+
+function generateChoices(answer) {
+    var choices = [answer];
+    while(choices.length<4) {
+        var val = fractionToDecimal(answer);
+        var diff = (Math.random()*5+1); 
+        var sign = Math.random()<0.5? -1:1;
+        var wrongDecimal = val+(diff*sign);
+        var wrongVal = decimalToFraction(wrongDecimal);
+        if(!choices.includes(wrongVal)) {
+            choices.push(wrongVal);
+        }
+    }
+    choices.sort(()=>Math.random()-0.5);
+    return choices;
+}
+
+function showQuestion() {
+    if(lives<=0) {
+        endGame("기회를 모두 소진하였습니다. 게임 종료!");
+        return;
+    }
+    if(!infiniteMode && usedQuestions.length>=70) {
+        infiniteMode = true;
+    }
+    var q = null;
+    if(!infiniteMode) {
+        q = questions[usedQuestions.length];
+        usedQuestions.push(q);
+    } else {
+        q = questions[Math.floor(Math.random()*questions.length)];
+    }
+    currentQuestion = q;
+    currentCorrectAnswer = q.answer;
+    document.getElementById('problem').innerHTML = "\\(" + q.problem + "\\)";
+    var choices = generateChoices(q.answer);
+    var choiceButtons = document.getElementsByClassName('choice-btn');
+    for(var i=0;i<4;i++){
+        choiceButtons[i].setAttribute('data-answer', choices[i]);
+        choiceButtons[i].innerHTML = "\\(" + choices[i] + "\\)";
+    }
+    MathJax.typesetPromise();
+    if(currentTimeLimit!==Infinity) {
+        energyTimeLeft = currentTimeLimit;
+        updateEnergyBar();
+        if(intervalEnergy) clearInterval(intervalEnergy);
+        intervalEnergy = setInterval(decrementEnergy,1000);
+    } else {
+        document.getElementById('energy-bar').style.width = '100%';
+    }
+}
+
+function decrementEnergy() {
+    if(currentTimeLimit===Infinity) return;
+    energyTimeLeft--;
+    updateEnergyBar();
+    if(energyTimeLeft<=0) {
+        clearInterval(intervalEnergy);
+        lives--;
+        updateLives();
+        showQuestion();
+    }
+}
+
+function updateEnergyBar() {
+    var percent = (energyTimeLeft/currentTimeLimit)*100;
+    document.getElementById('energy-bar').style.width = percent+'%';
+    if(percent<30) {
+        document.getElementById('energy-bar').style.background='#d9534f';
+    } else if(percent<60) {
+        document.getElementById('energy-bar').style.background='#f0ad4e';
+    } else {
+        document.getElementById('energy-bar').style.background='#76c043';
+    }
+}
+
+function chooseAnswer(e) {
+    if(solutionPopupOpen) return;
+    var selected = e.target.getAttribute('data-answer');
+    clearInterval(intervalEnergy);
+    if(selected===currentCorrectAnswer) {
+        score += currentScorePerProblem;
+        updateScore();
+        showRandomPrize();
+        showQuestion();
+    } else {
+        lives--;
+        updateLives();
+        showSolutionPopup(currentQuestion.solution);
+        if(lives<=0) {
+            endGame("기회를 모두 소진하였습니다.");
+        }
+    }
+}
+
+function showSolutionPopup(solutionText) {
+    solutionPopupOpen = true;
+    var pop = document.getElementById('popup');
+    pop.innerHTML = "<h2>오답입니다.</h2><p>풀이: " + solutionText + "</p><div class='close-btn'>닫기</div>";
+    pop.style.display = 'block';
+    pop.querySelector('.close-btn').addEventListener('click', function(){
+        pop.style.display = 'none';
+        solutionPopupOpen = false;
+        showQuestion(); 
+    });
+}
+
+function updateScore() {
+    document.getElementById('score').textContent = "점수: " + score;
+}
+
+function updateLives() {
+    document.getElementById('lives').textContent = "남은 기회: " + lives;
+    if(lives<=0) {
+        endGame("기회를 모두 소진하였습니다.");
+    }
+}
+
+function incrementGlobalTime() {
+    globalTime++;
+    var min = Math.floor(globalTime/60);
+    var sec = globalTime % 60;
+    document.getElementById('global-timer').textContent = "전체 진행 시간: " + min + "분 " + sec + "초";
+}
+
+function endGame(message) {
+    clearInterval(intervalGlobal);
+    clearInterval(intervalEnergy);
+    // 게임 영역 숨김
+    document.getElementById('game-area').style.display = 'none';
+    // 결과 패널에 최종 점수와 경과 시간 표시
+    document.getElementById('final-score').textContent = "최종 점수: " + score;
+    var min = Math.floor(globalTime/60);
+    var sec = globalTime % 60;
+    document.getElementById('final-time').textContent = "총 경과 시간: " + min + "분 " + sec + "초";
+    // 결과 패널 표시
+    document.getElementById('result-panel').style.display = 'block';
+}
+
+function selectDifficulty(diff) {
+    // 이름 입력 확인
+    var playerName = document.getElementById('playerName').value;
+    if(!playerName) {
+      alert("게임을 시작하기 전에 이름을 입력해주세요.");
+      return;
+    }
+    currentDifficulty = diff;
+    currentTimeLimit = difficultySettings[diff].time;
+    currentScorePerProblem = difficultySettings[diff].score;
+    document.getElementById('difficulty-selection').style.display = 'none';
+    document.getElementById('game-area').style.display = 'block';
+    globalTime = 0;
+    intervalGlobal = setInterval(incrementGlobalTime,1000);
+    updateScore();
+    updateLives();
+    showQuestion();
+}
+
+function showRandomPrize() {
+    var r = Math.random();
+    if(r<=0.0001) {
+        alert("축하합니다! 5000원 상품권 당첨!");
+    } else if(r<=0.001) {
+        alert("축하합니다! 3000원 상품권 당첨!");
+    } else if(r<=0.002) {
+        alert("축하합니다! 1회 면제권 획득!");
+    }
+}
+
+// 서버에 데이터 전송하는 함수 (비동기 함수)
+async function saveData(game, name, score, elapsedTime) {
+    const FUNCTION_URL = "https://us-central1-record-f420d.cloudfunctions.net/report";
+    const requestData = {
+        game,
+        name,
+        score: parseInt(score, 10),
+        elapsedTime: parseInt(elapsedTime, 10)
+    };
+    try {
+        const response = await fetch(FUNCTION_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(requestData)
+        });
+        const responseData = await response.json();
+        if (response.ok) {
+            document.getElementById('response').innerText = `성공: ${JSON.stringify(responseData, null, 2)}`;
+        } else {
+            document.getElementById('response').innerText = `오류: ${JSON.stringify(responseData, null, 2)}`;
+        }
+    } catch (error) {
+        console.error('요청 실패:', error);
+        document.getElementById('response').innerText = `네트워크 오류: ${error.message}`;
+    }
+}
+
+// 전송하기 버튼 클릭 시 호출되는 함수
+function sendResult() {
+    var playerName = document.getElementById('playerName').value;
+    // 게임 제목은 "휘매쓰 연산 챌린지!"
+    saveData("휘매쓰 연산 챌린지!", playerName, score, globalTime);
+}
+  
+// 전역 접근 가능하도록
+window.selectDifficulty = selectDifficulty;
+window.chooseAnswer = chooseAnswer;
+</script>
+</body>
+</html>
